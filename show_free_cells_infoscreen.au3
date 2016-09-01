@@ -1,131 +1,147 @@
-#pragma compile(ProductVersion, 0.3)
+#Region ;**** Directives created by AutoIt3Wrapper_GUI ****
+#AutoIt3Wrapper_Icon=icon.ico
+#EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
+#pragma compile(ProductVersion, 0.1)
 #pragma compile(UPX, true)
-#pragma compile(CompanyName, 'ООО Клиника ЛМС')
-#pragma compile(FileDescription, Скрипт для отображения свободных для записи ячеек в инфоклинике)
-#pragma compile(LegalCopyright, Грашкин Павел Павлович - Нижний Новгород - 31-555)
+#pragma compile(CompanyName, 'РћРћРћ РљР»РёРЅРёРєР° Р›РњРЎ')
+#pragma compile(FileDescription, РЎРєСЂРёРїС‚ РґР»СЏ РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ СЃРІРѕР±РѕРґРЅС‹С… РґР»СЏ Р·Р°РїРёСЃРё СЏС‡РµРµРє РІ РёРЅС„РѕРєР»РёРЅРёРєРµ)
+#pragma compile(LegalCopyright, Р“СЂР°С€РєРёРЅ РџР°РІРµР» РџР°РІР»РѕРІРёС‡ - РќРёР¶РЅРёР№ РќРѕРІРіРѕСЂРѕРґ - 31-555 - nn-admin@nnkk.budzdorov.su)
 #pragma compile(ProductName, show_free_cells_infoscreen)
 
 AutoItSetOption("TrayAutoPause", 0)
 
-#include <ButtonConstants.au3>
-#include <EditConstants.au3>
 #include <GUIConstantsEx.au3>
 #include <StaticConstants.au3>
 #include <FontConstants.au3>
 #include <WindowsConstants.au3>
-#include <WinAPI.au3>
 #include <Array.au3>
-#include <ColorConstants.au3>
-#include <GuiListView.au3>
-#include <ListviewConstants.au3>
-#include <Debug.au3>
 #include <File.au3>
 #include <Date.au3>
-#include <String.au3>
-#include <Math.au3>
 
 #Region ======================== Variables ========================
-Local $oMyError = ObjEvent("AutoIt.Error", "HandleComError")
+ToLog(@ComputerName)
+Local $errStr = "===ERROR=== "
+Local $iniFile = @ScriptDir & "\show_free_cells_infoscreen.ini"
 
-Local $delay = 15000
+If Not FileExists($iniFile) Then
+	MsgBox($MB_ICONERROR, "Critical error!", "Cannot find the settings file:" & @CRLF & $iniFile & _
+		@CRLF & @CRLF & "Please contact to developer: " & @CRLF & "Mail: nn-admin@bzklinika.ru" & @CRLF & _
+		"Internal phone number: 31-555")
+	ToLog($errStr & "Cannot find the settings file:" & $iniFile)
+	Exit
+EndIf
 
-Local $textColor = 0x2c3d3f
-Local $alternateTextColor = 0xffffff
-Local $mainBackgroundColor = 0xffffff
+Local $dX = @DesktopWidth
+Local $dY = @DesktopHeight
+;~ Local $dX = 1024
+;~ Local $dY = 768
 
-Local $childGuiColor = $mainBackgroundColor
-Local $childTotalLines = 14
-Local $childFirstCellFactorPercentage = 30
 
-Local $freeCellColor = 0xf2f9e0
-Local $docNameColor = 0xaa00aa
-Local $departmentNameColor = 0x2fbf5f;0x2db55a
-Local $borderColor = 0xd6d6d6
+Local $generalSectionName = "general"
+Local $dbPath = IniRead($iniFile, $generalSectionName, "infoclinicaBasePath", "172.16.166.2:nnkk")
+Local $delay = IniRead($iniFile, $generalSectionName, "delayBetweenSlidesInSeconds", 15) * 1000
+Local $minutesToShow = IniRead($iniFile, $generalSectionName, "showIntervalInMinutes", 180)
+Local $showOnlyDepartments = IniRead($iniFile, $generalSectionName, "showOnlyDepartments", False)
+If $showOnlyDepartments = "0" Then $showOnlyDepartments = False
+Local $animationDurationMs = IniRead($iniFile, $generalSectionName, "animationDurationInMilliseconds", 0)
+If $animationDurationMs = "0" Then $animationDurationMs = False
+Local $percentageThatFreeCellMustHaveFromInterval = IniRead($iniFile, $generalSectionName, "percentageThatFreeCellMustHaveFromInterval", 100)
 
+
+Local $mainZoneSectionName = "mainZone"
+Local $headerHeightPercentage = IniRead($iniFile, $mainZoneSectionName, "headerHeightInPercentage", 20)
+Local $mainFontName = IniRead($iniFile, $mainZoneSectionName, "fontName", "Franklin Gothic")
+Local $textColor = IniRead($iniFile, $mainZoneSectionName, "textColor", 0x2c3d3f)
+Local $alternateTextColor = IniRead($iniFile, $mainZoneSectionName, "alternateTextColor", 0xffffff)
+Local $mainBackgroundColor = IniRead($iniFile, $mainZoneSectionName, "backgroundColor", 0xffffff)
 Local $bottonLineHeight = 14
-
-;~ Local $dX = @DesktopWidth
-;~ Local $dY = @DesktopHeight
-Local $dX = 1024
-Local $dY = 768
-
-
-Local $headerHeightPartFromTotalHeight = 9
-Local $headerHeight = Round($dY / $headerHeightPartFromTotalHeight)
-
-Local $mainFontSize = Round($headerHeight / 3)
-Local $mainFontName = "Franklin Gothic"
-Local $mainFontWeight = $FW_BOLD
+Local $headerHeight = Round($dY * $headerHeightPercentage / 100)
+Local $mainFontWeight = $FW_SEMIBOLD
 Local $mainFontQuality = $CLEARTYPE_QUALITY
+Local $headerLabelFontWeight = $FW_BOLD
+Local $headerColor = IniRead($iniFile, $mainZoneSectionName, "headerBackgroundColor", $mainBackgroundColor)
+Local $headerTextColor = IniRead($iniFile, $mainZoneSectionName, "headerTextColor", 0x2c3d3f)
 
+
+Local $freeCellsZoneSectionName = "freeCellsZone"
+Local $childTotalLines = IniRead($iniFile, $freeCellsZoneSectionName, "lineHeightPercentage", 10)
+Local $childFirstCellFactorPercentage = IniRead($iniFile, $freeCellsZoneSectionName, "nameWidthPercantage", 30)
+Local $childGuiColor = IniRead($iniFile, $freeCellsZoneSectionName, "backgroundColor", 0xffffff)
+Local $freeCellColor = IniRead($iniFile, $freeCellsZoneSectionName, "cellColor", 0xf2f9e0)
+Local $docNameColor = IniRead($iniFile, $freeCellsZoneSectionName, "doctorNameBackgroundColor", 0xaa00aa)
+Local $departmentNameColor = IniRead($iniFile, $freeCellsZoneSectionName, "departmentNameBackgroundColor", 0x2fbf5f)
+Local $borderColor = IniRead($iniFile, $freeCellsZoneSectionName, "borderColor", 0xd6d6d6)
+
+
+Local $timeLinesSectionName = "timeLines"
+Local $showHoursUnderTimeLines = IniRead($iniFile, $timeLinesSectionName, "showHoursUnderTimeLines", False)
+If $showHoursUnderTimeLines = "0" Then $showHoursUnderTimeLines = False
+Local $showTimeLines = IniRead($iniFile, $timeLinesSectionName, "showTimeLines", True)
+If $showTimeLines = "0" Then $showTimeLines = False
+Local $showEveryMinuteLines = IniRead($iniFile, $timeLinesSectionName, "showEveryMinuteLines", True)
+If $showEveryMinuteLines = "0" Then $showEveryMinuteLines = False
+Local $minuteTimeLineColor = IniRead($iniFile, $timeLinesSectionName, "minuteTimeLineColor", 0xeeeeee)
+Local $halfHourTimeLineColor = IniRead($iniFile, $timeLinesSectionName, "halfHourTimeLineColor", 0x999999)
+Local $hoursColor = IniRead($iniFile, $timeLinesSectionName, "hoursTextColor", 0x666666)
+
+
+Local $advertisingSectionName = "advertising"
+Local $pathToPopUpImage = IniRead($iniFile, $advertisingSectionName, "pathToPopUpImage", "")
+Local $parametersToTransfer = IniRead($iniFile, $advertisingSectionName, "parametersToTransfer", "")
+Local $showAfterPeriodInSeconds = IniRead($iniFile, $advertisingSectionName, "showAfterPeriodInSeconds", 0); * 1000
+
+Local $titleTextSectionName = "titleText"
+Local $titleArray = IniReadSection($iniFile, $titleTextSectionName)
+Local $titleText = ""
+Local $titleArrayRows = UBound($titleArray, $UBOUND_ROWS) - 1
+For $i = 1 To $titleArrayRows
+	$titleText &= $titleArray[$i][1]
+	If $i < $titleArrayRows Then $titleText &= @CRLF
+Next
+
+
+Local $mainFontSize = Round($headerHeight / (2 + $titleArrayRows) * 0.9)
 Local $mainGuiGap = $mainFontSize
-
-Local $headerLabelFontWeight = $FW_SEMIBOLD
-Local $headerTextColor = $textColor
-Local $headerColor = $mainBackgroundColor
-
 Local $timeLabelHeight = Round($mainFontSize * 1.7)
 
-Local $minutesToShow = 180
 
-Local $showHoursUnderTimeLines = False
-Local $showTimeLines = True
-Local $showEveryMinuteLines = True
-
-Local $minuteTimeLineColor = 0xeeeeee
-Local $halfHourTimeLineColor = 0x999999
-Local $hoursColor = 0x666666
-
-Local $showOnlyDepartments = True
+Local $nothingToShowTextSectionName = "nothingToShowText"
+Local $nothingFoundArray = IniReadSection($iniFile, $nothingToShowTextSectionName)
+Local $nothingFoundText = ""
+Local $nothingFoundArrayRows = UBound($nothingFoundArray, $UBOUND_ROWS) - 1
+For $i = 1 To $nothingFoundArrayRows
+	$nothingFoundText &= $nothingFoundArray[$i][1]
+	If $i < $nothingFoundArrayRows Then $nothingFoundText &= @CRLF
+Next
 
 
+Local $excludedDepartmentsSectionName = "excludedDepartments"
+Local $excludedArray = IniReadSection($iniFile, $excludedDepartmentsSectionName)
+Local $excludedDepartments[0]
+Local $excludedArrayRows = UBound($excludedArray, $UBOUND_ROWS) - 1
+For $i = 1 To $excludedArrayRows
+	_ArrayAdd($excludedDepartments, $excludedArray[$i][1])
+Next
+
+
+Local $oMyError = ObjEvent("AutoIt.Error", "HandleComError")
 Local $childGui = 0
 Local $childGuiOld = 0
-
-Local $animationDurationMs = 0
-Local $percentageThatFreeCellMustHaveFromInterval = 100
-
-
-Local $titleText = "Свободные места для записи на ближайшее время"
-;~ Local $titleText = "При записи к специалистам в указанное время"  & @CRLF & "предоставляется СКИДКА 5% при наличном расчете"
-
-Local $excludedDepartments[] = ["физиопроцедуры", _
-							  "рентген", _
-							  "процедурный", _
-							  "предрейсовый осмотр", _
-							  "стационар", _
-							  "анестезиология-реаниматология", _
-							  "помощь на дому"]
-
-
-
-
-Local $messageToSend = ""
-Local $current_pc_name = @ComputerName
-Local $errStr = "===ERROR=== "
-ConsoleWrite("Current_pc_name: " & $current_pc_name & @CRLF)
-
-Local $logFilePath = @ScriptDir & "\" & @ScriptName & ".log"
-Local $logFile = FileOpen($logFilePath, $FO_OVERWRITE)
-ToLog($current_pc_name)
-ToLog(@CRLF & "---Check for temp folder and create log---")
-
-If $logFile = -1 Then ToLog($errStr & "Cannot create log file")
+Local $mainGui = 0
 #EndRegion ======================== Variables ========================
 
 
-;================= CURSOR HIDE ===============
-;~ _WinAPI_ShowCursor(False)
-
+_WinAPI_ShowCursor(False)
 ShowGui()
 
 
 Func ShowGui()
-	Local $mainGui = GUICreate("ShowFreeCells", $dX, $dY, 0, 0, $WS_POPUPWINDOW) ;, $WS_EX_TOPMOST)
+	$mainGui = GUICreate("ShowFreeCells", $dX, $dY, 0, 0, $WS_POPUP)
 	Local $titleLabel = CreateStandardDesign($mainGui, $titleText, True)
 
 	Local $timeLabel = GuiCtrlCreateLabel("", $mainGuiGap, $dY - $timeLabelHeight - $bottonLineHeight, _
 		$dX - $mainGuiGap * 2, $timeLabelHeight, BitOr($SS_CENTER, $SS_CENTERIMAGE))
+
 	GUICtrlSetColor(-1, $textColor)
 	GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 	UpdateTimeLabel($timeLabel)
@@ -134,26 +150,32 @@ Func ShowGui()
 
 	Local $titleLabelPosition = ControlGetPos("", "", $titleLabel)
 	Local $timeLabelPosition = ControlGetPos("", "", $timeLabel)
+
 	Local $childWidth = $dX - $mainGuiGap * 2
 	Local $childHeight = $timeLabelPosition[1] - $titleLabelPosition[1] - $titleLabelPosition[3] - $mainGuiGap
 	Local $childX = $mainGuiGap
 	Local $childY = $titleLabelPosition[1] + $titleLabelPosition[3]
+	ConsoleWrite("$childHeight: " & $childHeight & " $childY: " & $childY & @CRLF)
+	If $headerColor <> $mainBackgroundColor Then
+		$childY += $mainGuiGap
+		$childHeight -= $mainGuiGap
+	EndIf
 
-	Local $firstCellWidth = Round($childWidth * ($childFirstCellFactorPercentage / 100)) ;0.3
-	Local $cellHeight = Round($childHeight / $childTotalLines);($mainFontSize / 2))
+	ConsoleWrite("$childHeight: " & $childHeight & " $childY: " & $childY & @CRLF)
 
-	Local $childFontSize = Round($cellHeight * 0.45)
+
+	Local $firstCellWidth = Round($childWidth * ($childFirstCellFactorPercentage / 100))
+	Local $cellHeight = Round($childHeight * $childTotalLines / 100)
+
+	Local $childFontSize = Round($cellHeight * 0.5)
 
 	Local $childGuiGap = Round($cellHeight / 10)
 	Local $minuteX = Round(($childWidth - $firstCellWidth) / $minutesToShow)
 
 	$firstCellWidth = $childWidth - $minutesToShow * $minuteX
 
-	Local $nothingFoundText = "Уважаемые пациенты," & @CRLF & @CRLF & "к сожалению, на данный момент" & @CRLF & _
-		"нет свободных для записи мест" & @CRLF & @CRLF & "Подробную информацию" & @CRLF & _
-		"Вы можете получить на регистратуре"
-
 	Local $records = 0
+	Local $timeHasPassed = 0
 
 	While True
 		If $childGui And $animationDurationMs Then
@@ -161,6 +183,7 @@ Func ShowGui()
 		EndIf
 
 		Local $now = _NowCalc()
+		Local $adTimer = $now
 		Local $xpos = 0
 		Local $ypos = 0
 
@@ -172,7 +195,6 @@ Func ShowGui()
 			GUISetState()
 
 			If Not $animationDurationMs Then
-				ToLog($childGui & " " & $childGuiOld)
 				If $childGuiOld Then GUIDelete($childGuiOld)
 				$childGuiOld = $childGui
 			EndIf
@@ -184,7 +206,8 @@ Func ShowGui()
 				ToLog("====DEPARTMENT HEIGHT TOO MUCH=====")
 				FinalizeScreen($xpos, $ypos, $childWidth, $childHeight - $ypos)
 
-				Sleep($delay)
+				GoToSleep($delay)
+				UpdateTimeLabel($timeLabel)
 
 				If $animationDurationMs Then GUIDelete($childGui)
 				$childGui = CreateChildGui($childWidth, $childHeight, $childX, $childY, $mainGui, $childFontSize, _
@@ -208,6 +231,9 @@ Func ShowGui()
 
 			$ypos += $childGuiGap
 
+			_ArraySort($records[$i][1])
+			ToLog(_ArrayToString($records[$i][1], @CRLF))
+
 			Local $elArray = $records[$i][1]
 			For $x = 0 To UBound($elArray) - 1
 				ToLog("----DOC CYCLE----")
@@ -216,7 +242,8 @@ Func ShowGui()
 					$ypos -= $childGuiGap
 					FinalizeScreen($xpos, $ypos, $childWidth, $childHeight - $ypos)
 
-					Sleep($delay)
+					GoToSleep($delay)
+					UpdateTimeLabel($timeLabel)
 
 					If $animationDurationMs Then GUIDelete($childGui)
 
@@ -234,7 +261,7 @@ Func ShowGui()
 
 				Local $docArray = StringSplit($elArray[$x], "@", $STR_NOCOUNT)
 				Local $docName = $docArray[0]
-				Local $docNameBackgroundColor = $showOnlyDepartments ? $departmentNameColor : $mainBackgroundColor
+				Local $docNameBackgroundColor = $showOnlyDepartments ? $departmentNameColor : $docNameColor
 				Local $docNameTextColor = $showOnlyDepartments ? $alternateTextColor : $textColor
 
 				CreateButton($docName, $xpos, $ypos, $firstCellWidth - $minuteX, $cellHeight, $docNameBackgroundColor, _
@@ -255,9 +282,6 @@ Func ShowGui()
 					Local $cellInfo = StringSplit($docArray[$y], ";", $STR_NOCOUNT)
 					Local $text = $cellInfo[0]
 					Local $startTime = $cellInfo[1]
-
-
-					;===== NEW =====
 					Local $interval = $cellInfo[2]
 
 					If StringLeft($text, 1) = "0" Then $text = StringRight($text, 4)
@@ -265,7 +289,7 @@ Func ShowGui()
 					Local $currentCellX = _DateDiff('n', $now, $startTime) * $minuteX + $firstCellWidth + 1
 					Local $currentCellWidth = $minuteX * $interval
 
-					CreateButton($text, $currentCellX, $ypos, $currentCellWidth, $cellHeight)
+					CreateButton($text, $currentCellX, $ypos, $currentCellWidth, $cellHeight, $freeCellColor, $borderColor, $headerTextColor)
 					If $childFontSize * 4 > $currentCellWidth Then GUICtrlSetFont(-1, $currentCellWidth / 4)
 				Next
 
@@ -277,51 +301,44 @@ Func ShowGui()
 			If $i = UBound($records, $UBOUND_ROWS) - 1 Then
 				FinalizeScreen($xpos, $ypos, $childWidth, $childHeight - $ypos)
 			EndIf
-
-			_ArraySort($records[$i][1])
-			ToLog(_ArrayToString($records[$i][1], @CRLF))
 		Next
 
-		Local $timer = TimerInit()
+;~ 		Local $timer = 0;_Timer_Init()
+
+		UpdateTimeLabel($timeLabel)
+
+;~ 		$timeHasPassed += _DateDiff('s', $adTimer, _NowCalc())
+;~ ToLog("ad: " & $adTimer & " " & _NowCalc())
+;~ 		ToLog("$showAfterPeriodInSeconds: " & $showAfterPeriodInSeconds & " $timeHasPassed: " & _DateDiff('s', $adTimer, _NowCalc()))
+;~ 		If  >= $showAfterPeriodInSeconds Then;$showAfterPeriodInSeconds Then
+;~ 			If FileExists($pathToPopUpImage) Then
+;~ 				ToLog("Try to run the PopUpImage")
+;~ 				ShellExecuteWait($pathToPopUpImage, $parametersToTransfer)
+;~ 			Else
+;~ 				ToLog($errStr & "File not exist: " & $pathToPopUpImage)
+;~ 			EndIf
+
+;~ 			$timeHasPassed = 0
+;~ 		EndIf
 
 		$records = GetData($now)
 		_ArraySort($records)
 
+		GoToSleep($delay); - _Timer_Diff($timer))
 		UpdateTimeLabel($timeLabel)
-
-		Sleep($delay - TimerDiff($timer))
 	WEnd
 EndFunc
 
 
-Func FinalizeScreen($x, $y, $width, $height, $onlyTopLine = False)
-	If Not $onlyTopLine Then
-		GUICtrlCreateLabel("", $x, $y, $width, $height)
-		GUICtrlSetBkColor(-1, $childGuiColor)
-	EndIf
-
-	GuiCtrlCreateLabel("", $x, $y, $width, 1)
-	GUICtrlSetBkColor(-1, $borderColor)
-
-
-
-	If Not $animationDurationMs And Not $onlyTopLine Then
-		GUISetState()
-		If $childGuiOld Then GUIDelete($childGuiOld)
-		$childGuiOld = $childGui
-	EndIf
-EndFunc
-
 
 Func CreateChildGui($width, $height, $x, $y, $root, $fontSize, ByRef $xpos, ByRef $ypos, _
 	$firstCellWidth, $minuteX, $childGuiGap, $childFontSize, $now, $timeLines = True)
+
 	$xpos = 0
 	$ypos = 0
 
-	Local $newGui = GUICreate("Child", $width, $height, $x, $y, $WS_CHILD, $WS_EX_TOPMOST, $root)
-	GUISetFont($fontSize) ;$mainFontSize * 0.8)
-;~ 	Local $color = "0x" & Random(0, 9, 1) & "f" & Random(0, 9, 1) & "f" & Random(0, 9, 1) & "f"
-;~ 	ToLog("=============" & $color)
+	Local $newGui = GUICreate("Child", $width, $height, $x, $y, $WS_POPUP, -1, $root)
+	GUISetFont($fontSize)
 	GUISetBkColor($childGuiColor)
 
 	If $showTimeLines And $timeLines Then
@@ -348,11 +365,11 @@ EndFunc
 
 Func CreateStandardDesign($gui, $titleText, $trademark = False)
 	GUISetBkColor($mainBackgroundColor)
-	GUISetFont($mainFontSize, $mainFontWeight, 0, $mainFontName, $gui, $mainFontQuality)
-;~ 	Local $fontFactor = StringInStr($titleText, @CRLF) ? 0.8 : 1
-	If StringInStr($titleText, @CRLF) Then $mainFontSize *= 0.8
-	Local $titleLabel = CreateLabel($titleText, 0, 0, $dX, $headerHeight, $headerTextColor, $headerColor, $gui, $mainFontSize)
-	GUICtrlSetFont(-1, $mainFontSize, $headerLabelFontWeight)
+	GUISetFont($mainFontSize, $headerLabelFontWeight, 0, $mainFontName, $gui, $mainFontQuality)
+
+	Local $titleLabel = CreateLabel($titleText, 0, 0, $dX, $headerHeight, $headerTextColor, $headerColor, $gui)
+	If StringInStr($titleText, @CRLF) Then $mainFontSize *= 0.9
+	GUISetFont($mainFontSize, $mainFontWeight)
 	GUICtrlCreatePic(@ScriptDir & "\picBottomLine.jpg", 0, $dY - $bottonLineHeight, $dX, $bottonLineHeight)
 
 	If $trademark Then
@@ -367,11 +384,9 @@ EndFunc
 
 
 Func CreateLabel($text, $x, $y, $width, $height, $textColor, $backgroundColor, $gui, $fontSize = $mainFontSize)
-;~ 	ToLog("FOntSIze: " & $fontSize)
 	Local $titleLabel = GUICtrlCreateLabel("", $x, $y, $width, $height)
 	GUICtrlSetBkColor(-1, $backgroundColor)
 
-	GUISetFont($fontSize)
 	Local $label = GUICtrlCreateLabel($text, 0, 0, -1, -1, $SS_CENTER)
 	GUICtrlSetBkColor(-1, $GUI_BKCOLOR_TRANSPARENT)
 	GUICtrlSetColor(-1, $textColor)
@@ -382,15 +397,14 @@ Func CreateLabel($text, $x, $y, $width, $height, $textColor, $backgroundColor, $
 		Local $newY = Round($y + ($height - $position[3]) / 2)
 		GUICtrlSetPos($label, $newX, $newY)
 	EndIf
-	GUISetFont($mainFontSize)
 
 	Return $titleLabel
 EndFunc
 
 
-Func DrawTimeLines($startX, $oneMinuteX, $headerHeight, $totalWidth, $totalHeight, $fontSize, $now)
-	ToLog("DrawTimeLines $startX: " & $startX & " $oneMinuteX: " & $oneMinuteX & " totalWidth: " & $totalWidth)
 
+
+Func DrawTimeLines($startX, $oneMinuteX, $headerHeight, $totalWidth, $totalHeight, $fontSize, $now)
 	If $showHoursUnderTimeLines Then
 		$headerHeight += 1
 	Else
@@ -418,7 +432,7 @@ Func DrawTimeLines($startX, $oneMinuteX, $headerHeight, $totalWidth, $totalHeigh
 
 		Local $currentMinute = StringMid($tmpDate, 16, 1)
 		If $currentMinute = "0" Or $currentMinute = "5" Or $showEveryMinuteLines Then
-			GUICtrlCreateLabel("", $startX + $oneMinuteX * $i - $oneMinuteX, $headerHeight, $width, $totalHeight - $headerHeight)
+			GUICtrlCreateLabel("", $startX + $oneMinuteX * $i - $oneMinuteX, $headerHeight + 1, $width, $totalHeight - $headerHeight)
 			GUICtrlSetBkColor(-1, $color)
 		EndIf
 	Next
@@ -427,9 +441,30 @@ EndFunc
 
 Func UpdateTimeLabel($label)
 	Local $currentHour = @HOUR >= 10 ? @HOUR : StringRight(@HOUR, 1)
-	Local $newText = "Текущее время - " & $currentHour & ":" & @MIN
+	Local $newText = "РўРµРєСѓС‰РµРµ РІСЂРµРјСЏ - " & $currentHour & ":" & @MIN
 	GUICtrlSetData($label, $newText)
 EndFunc
+
+
+Func FinalizeScreen($x, $y, $width, $height, $onlyTopLine = False)
+	If Not $onlyTopLine Then
+		GUICtrlCreateLabel("", $x, $y, $width, $height)
+		GUICtrlSetBkColor(-1, $childGuiColor)
+	EndIf
+
+	GuiCtrlCreateLabel("", $x, $y, $width, 1)
+	GUICtrlSetBkColor(-1, $borderColor)
+
+	If Not $animationDurationMs And Not $onlyTopLine Then
+		GUISetState()
+		If $childGuiOld Then
+			GUIDelete($childGuiOld)
+		EndIf
+		$childGuiOld = $childGui
+	EndIf
+EndFunc
+
+
 
 
 Func GetData($now)
@@ -440,17 +475,21 @@ Func GetData($now)
 			"Join Doctor D On D.DCode = Ds.DCode " & _
 			"Join Departments Dep On Dep.DepNum = Ds.DepNum " & _
 			"Where Ds.WDate = 'today' " & _
-			"And Ds.Shinterv Is Not Null"
+			"And Ds.Shinterv Is Not Null " & _
+			"And CoalEsce(D.ViewInSched,0) In (1, 10)"
 
 	Local $doctors = ExecuteSQL($sqlDoc)
 
 	If Not IsArray($doctors) Or UBound($doctors, $UBOUND_ROWS) = 0 Then
-		ToLog("Doctors querry return nothing")
+		ToLog($errStr & "Doctors querry return nothing")
 		Return
 	EndIf
 
 	$doctors = RemoveExcludedDepartments($doctors)
 	NormalizeTimesInArray($doctors, 4, 6)
+
+;~ 	_ArrayDisplay($doctors)
+
 
 	Local $sqlBusy = "Select Sch.DCode, Ss.DepNum, Sch.BHour, Sch.BMin, Sch.FHour, Sch.FMin " & _
 			"From Schedule Sch " & _
@@ -462,11 +501,14 @@ Func GetData($now)
 	Local $busyCells = ExecuteSQL($sqlBusy)
 	NormalizeTimesInArray($busyCells, 2, 4)
 
+;~ 	_ArrayDisplay($busyCells)
+
 	Local $resultArray[0][2]
 	Local $maxTimeToShow = _DateAdd('n', $minutesToShow, $now)
 
 	For $i = 0 To UBound($doctors, $UBOUND_ROWS) - 1
 		Local $name = $doctors[$i][0]
+		ConsoleWrite($name & @CRLF)
 		If StringInStr($name, "(") Then $name = StringLeft($name, StringInStr($name, "(") - 1)
 		If StringRight($name, 1) = " " Then $name = StringLeft($name, StringLen($name) - 1)
 
@@ -503,9 +545,13 @@ Func GetData($now)
 		Local $docBusyArray = ResultFromSearchArrayById($busyCells, $docId, $departmentId, 0, 1)
 		If IsArray($docBusyArray) Then _ArraySort($docBusyArray, Default, Default, Default, 2)
 
+
+;~ 		_ArrayDisplay($docBusyArray)
+
 		While True
 			Local $currentIntervalEnd = _DateAdd('n', $interval, $docIntervalStart)
 			Local $currentInterval = $interval
+
 
 			If IsArray($docBusyArray) Then
 				Local $toSkip = False
@@ -666,7 +712,6 @@ Func GetData($now)
 			$deptResultArray[0] = $prevInterval
 			$prevInterval = StringSplit($prevInterval, ";", $STR_NOCOUNT)
 			Local $prevTimeEnd = _DateAdd('n', $prevInterval[2], $prevInterval[1])
-			ToLog("prev: " & $prevTimeEnd)
 
 			For $x = 1 To UBound($deptTotalArray) - 1
 				Local $curTime = StringSplit($deptTotalArray[$x], ";", $STR_NOCOUNT)
@@ -689,6 +734,8 @@ Func GetData($now)
 		Return
 	EndIf
 
+
+	ToLog("Departments found: " & @CRLF & _ArrayToString($resultArray))
 	Return $resultArray
 EndFunc
 
@@ -747,21 +794,23 @@ EndFunc
 Func GetFullDate($hour, $minute)
 	If $hour < 10 Then $hour = "0" & $hour
 	If $minute < 10 Then $minute = "0" & $minute
+	If $hour = 24 Then
+		$hour = 23
+		$minute = 59
+	EndIf
 	Local $today = @YEAR & "/" & @MON & "/" & @MDAY
 	Return $today & " " & $hour & ":" & $minute & ":00"
 EndFunc
 
 
 Func ExecuteSQL($sql)
-;~ 	Local $sqlBD = "DRIVER=Firebird/InterBase(r) driver; UID=; PWD=; DBNAME=;"
-	Local $sqlBD = "DRIVER=Firebird/InterBase(r) driver; UID=; PWD=; DBNAME=;"
-;~  Local $sqlBD = "DRIVER=Firebird/InterBase(r) driver; UID=; PWD=; DBNAME=;"
+	Local $sqlBD = "DRIVER=Firebird/InterBase(r) driver; UID=sysdba; PWD=masterkey; DBNAME=" & $dbPath & ";"
 	Local $adoConnection = ObjCreate("ADODB.Connection")
 	Local $adoRecords = ObjCreate("ADODB.Recordset")
 
 	$adoConnection.Open($sqlBD)
 	$adoRecords.CursorType = 2
-	$adoRecords.LockType = 3 ;3 - locks 1 - readonly
+	$adoRecords.LockType = 3
 
 	Local $result = ""
 	$adoRecords.Open($sql, $adoConnection)
@@ -781,103 +830,35 @@ Func ExecuteSQL($sql)
 EndFunc
 
 
-Func ToLog($message)
-	$message &= @CRLF
-	$messageToSend &= $message
-	ConsoleWrite($message)
-	_FileWriteLog($logFile, $message)
+
+
+Func GoToSleep($time)
+	Local $counter = $time
+	While $counter > 0
+		$msg = GUIGetMsg()
+		If $msg = $GUI_EVENT_CLOSE Then Exit
+		Sleep(50)
+		$counter -= 50
+	WEnd
 EndFunc
 
 
-#CS Func SendEmail()
-; 	If Not $send_email Then
-; 		FileClose($logFile)
-; 		Return
-; 	EndIf
-;
-; 	ToLog(@CRLF & "---Sending email---")
-; 	If _INetSmtpMailCom($server, "Copy MARS data", $login, $to, _
-; 			$current_pc_name & ": error(s) occurred", _
-; 			$messageToSend, "", "", "", $login, $password) <> 0 Then
-;
-; 		_INetSmtpMailCom($server_backup, "Copy MARS data", $login_backup, $to_backup, _
-; 				$current_pc_name & ": error(s) occurred", _
-; 				$messageToSend, "", "", "", $login_backup, $password_backup)
-; 	EndIf
-;
-; 	FileClose($logFile)
-; EndFunc   ;==>SendEmail
- #CE
-
-
-Func _INetSmtpMailCom($s_SmtpServer, $s_FromName, $s_FromAddress, $s_ToAddress, _
-		$s_Subject = "", $as_Body = "", $s_AttachFiles = "", $s_CcAddress = "", _
-		$s_BccAddress = "", $s_Username = "", $s_Password = "", $IPPort = 25, $ssl = 0)
-
-	Local $objEmail = ObjCreate("CDO.Message")
-	Local $i_Error = 0
-	Local $i_Error_desciption = ""
-
-	$objEmail.From = '"' & $s_FromName & '" <' & $s_FromAddress & '>'
-	$objEmail.To = $s_ToAddress
-
-	If $s_CcAddress <> "" Then $objEmail.Cc = $s_CcAddress
-	If $s_BccAddress <> "" Then $objEmail.Bcc = $s_BccAddress
-
-	$objEmail.Subject = $s_Subject
-
-	If StringInStr($as_Body, "<") And StringInStr($as_Body, ">") Then
-		$objEmail.HTMLBody = $as_Body
-	Else
-		$objEmail.Textbody = $as_Body & @CRLF
-	EndIf
-
-	If $s_AttachFiles <> "" Then
-		Local $S_Files2Attach = StringSplit($s_AttachFiles, ";")
-		For $x = 1 To $S_Files2Attach[0] - 1
-			$S_Files2Attach[$x] = _PathFull($S_Files2Attach[$x])
-			If FileExists($S_Files2Attach[$x]) Then
-				$objEmail.AddAttachment($S_Files2Attach[$x])
-			Else
-				$i_Error_desciption = $i_Error_desciption & @LF & 'File not found to attach: ' & $S_Files2Attach[$x]
-				SetError(1)
-				Return 0
-			EndIf
-		Next
-	EndIf
-
-	$objEmail.Configuration.Fields.Item("http://schemas.microsoft.com/cdo/configuration/sendusing") = 2
-	$objEmail.Configuration.Fields.Item("http://schemas.microsoft.com/cdo/configuration/smtpserver") = $s_SmtpServer
-	$objEmail.Configuration.Fields.Item("http://schemas.microsoft.com/cdo/configuration/smtpserverport") = $IPPort
-
-	If $s_Username <> "" Then
-		$objEmail.Configuration.Fields.Item("http://schemas.microsoft.com/cdo/configuration/smtpauthenticate") = 1
-		$objEmail.Configuration.Fields.Item("http://schemas.microsoft.com/cdo/configuration/sendusername") = $s_Username
-		$objEmail.Configuration.Fields.Item("http://schemas.microsoft.com/cdo/configuration/sendpassword") = $s_Password
-	EndIf
-
-	If $ssl Then
-		$objEmail.Configuration.Fields.Item("http://schemas.microsoft.com/cdo/configuration/smtpusessl") = True
-	EndIf
-
-	$objEmail.Configuration.Fields.Update
-	$objEmail.Send
-
-	If @error Then
-		SetError(2)
-	EndIf
-
-	Return @error
+Func ToLog($message)
+	Local $tempFolder = StringSplit(@SystemDir, "\")[1] & "\Temp\"
+	Local $logFilePath = $tempFolder & @ScriptName & "_" & @YEAR & @MON & @MDAY & ".log"
+	$message &= @CRLF
+	ConsoleWrite($message)
+	_FileWriteLog($logFilePath, $message)
 EndFunc
 
 
 Func HandleComError()
-;~ 	  ConsoleWrite("error.description: " & @TAB & $oMyError.description  & @CRLF & _
-;~ 				  "err.windescription:"   & @TAB & $oMyError.windescription & @CRLF & _
-;~ 				  "err.number is: "       & @TAB & hex($oMyError.number,8)  & @CRLF & _
-;~ 				  "err.lastdllerror is: "   & @TAB & $oMyError.lastdllerror   & @CRLF & _
-;~ 				  "err.scriptline is: "   & @TAB & $oMyError.scriptline   & @CRLF & _
-;~ 				  "err.source is: "       & @TAB & $oMyError.source       & @CRLF & _
-;~ 				  "err.helpfile is: "       & @TAB & $oMyError.helpfile     & @CRLF & _
-;~ 				  "err.helpcontext is: " & @TAB & $oMyError.helpcontext & @CRLF)
+	ToLog("error.description: " & @TAB & $oMyError.description  & @CRLF & _
+		"err.windescription:"   & @TAB & $oMyError.windescription & @CRLF & _
+		"err.number is: "       & @TAB & hex($oMyError.number,8)  & @CRLF & _
+		"err.lastdllerror is: " & @TAB & $oMyError.lastdllerror   & @CRLF & _
+		"err.scriptline is: "   & @TAB & $oMyError.scriptline   & @CRLF & _
+		"err.source is: "       & @TAB & $oMyError.source       & @CRLF & _
+		"err.helpfile is: "     & @TAB & $oMyError.helpfile     & @CRLF & _
+		"err.helpcontext is: "  & @TAB & $oMyError.helpcontext & @CRLF)
 EndFunc
